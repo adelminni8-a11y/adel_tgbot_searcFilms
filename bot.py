@@ -1,18 +1,17 @@
 """
 Telegram-бот поиска фильмов по описанию сюжета.
-Работает через webhook (не polling) — для деплоя на VPS за nginx с SSL.
+Работает через polling.
 """
 
 import logging
 import os
+import asyncio
 
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
-from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
-from aiohttp import web
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -23,13 +22,6 @@ logger = logging.getLogger(__name__)
 
 # --- Настройки из переменных окружения ---
 BOT_TOKEN = os.environ["BOT_TOKEN"]
-WEBHOOK_HOST = os.environ["WEBHOOK_HOST"]            # например: https://yourdomain.com
-WEBHOOK_PATH = os.environ.get("WEBHOOK_PATH", "/webhook")
-WEBHOOK_URL = WEBHOOK_HOST.rstrip("/") + WEBHOOK_PATH
-
-WEBAPP_HOST = os.environ.get("WEBAPP_HOST", "0.0.0.0")
-WEBAPP_PORT = int(os.environ.get("WEBAPP_PORT", "8080"))
-
 TOP_K = int(os.environ.get("TOP_K", "5"))
 
 router = Router()
@@ -78,35 +70,14 @@ async def handle_query(message: Message):
     await message.answer("\n\n".join(blocks))
 
 
-async def health(request: web.Request) -> web.Response:
-    return web.Response(text="OK")
-
-
-async def on_startup(bot: Bot):
-    await bot.set_webhook(WEBHOOK_URL)
-    logger.info(f"Webhook установлен: {WEBHOOK_URL}")
-
-
-async def on_shutdown(bot: Bot):
-    await bot.delete_webhook()
-    logger.info("Webhook удалён")
-
-
-def main():
+async def main():
     bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher()
     dp.include_router(router)
-    dp.startup.register(on_startup)
-    dp.shutdown.register(on_shutdown)
 
-    app = web.Application()
-    app.router.add_get("/", health)  # для проверки, что контейнер живой
-
-    SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
-    setup_application(app, dp, bot=bot)
-
-    web.run_app(app, host=WEBAPP_HOST, port=WEBAPP_PORT)
+    logger.info("Бот запущен (polling)")
+    await dp.start_polling(bot)
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

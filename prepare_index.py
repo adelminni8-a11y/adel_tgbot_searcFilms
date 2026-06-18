@@ -1,20 +1,3 @@
-"""
-Разовая подготовка данных для бота.
-
-Что делает:
-1. Загружает tmdb_5000_movies.csv
-2. Парсит жанры и переводит их на русский (по словарю — жанров мало и они фиксированные)
-3. Переводит описания (overview) на русский через Google Translate (deep-translator)
-4. Строит эмбеддинги модели intfloat/multilingual-e5-small и FAISS-индекс
-5. Сохраняет всё в models/ — этим уже пользуется бот в проде
-
-Запускается ОДИН РАЗ локально (или при обновлении датасета), не в докере бота.
-Нужен интернет: один раз — скачать модель с HuggingFace, и на всё время перевода — Google Translate.
-
-Скрипт можно прерывать и перезапускать: уже переведённые описания не переводятся повторно
-(прогресс сохраняется в models/movies_data.csv).
-"""
-
 import json
 import os
 import time
@@ -25,8 +8,6 @@ import pandas as pd
 from deep_translator import GoogleTranslator
 from sentence_transformers import SentenceTransformer
 
-# Фиксированный словарь жанров TMDB — надёжнее и быстрее, чем гонять
-# одни и те же ~20 названий через переводчик
 GENRE_TRANSLATIONS = {
     "Action": "Боевик",
     "Adventure": "Приключения",
@@ -52,7 +33,6 @@ GENRE_TRANSLATIONS = {
 
 
 def parse_genres(raw):
-    """Превращает строку вида '[{"id":28,"name":"Action"}, ...]' в список названий"""
     try:
         data = json.loads(raw)
     except (json.JSONDecodeError, TypeError):
@@ -69,7 +49,6 @@ def translate_genres(names):
 
 
 def translate_text(text, translator, retries=3, base_delay=0.4):
-    """Переводит один текст с повторными попытками при ошибке/таймауте"""
     text = str(text).strip()
     if not text:
         return ""
@@ -87,8 +66,7 @@ def translate_text(text, translator, retries=3, base_delay=0.4):
 
 class IndexBuilder:
     def __init__(self):
-        print("🚀 Загрузка модели sentence-transformers (нужен интернет при первом запуске)...")
-        # local_files_only НЕ ставим тут — это разовый скрипт, модель может качаться
+        print("🚀 Загрузка модели sentence-transformers...")
         self.model = SentenceTransformer("intfloat/multilingual-e5-small")
         print("✅ Модель загружена")
         self.translator = GoogleTranslator(source="en", target="ru")
@@ -115,7 +93,6 @@ class IndexBuilder:
             raw["overview_ru"] = ""
             df = raw
 
-        # переводим только те описания, которых ещё нет (пустая строка)
         todo = df.index[df["overview_ru"] == ""].tolist()
         print(f"🌍 Нужно перевести {len(todo)} описаний из {len(df)}...")
 
@@ -128,7 +105,7 @@ class IndexBuilder:
         df.to_csv(checkpoint_path, index=False)
         print("✅ Перевод завершён")
 
-        print("🔨 Создаём эмбеддинги (с префиксом 'passage: ', как требует модель e5)...")
+        print("🔨 Создаём эмбеддинги...")
         passages = ["passage: " + str(t) for t in df["overview"].tolist()]
         embeddings = self.model.encode(
             passages,
@@ -146,7 +123,6 @@ class IndexBuilder:
         df.to_csv(checkpoint_path, index=False)
 
         print(f"💾 Готово! Индекс ({index.ntotal} фильмов) и данные сохранены в {save_path}/")
-
 
 if __name__ == "__main__":
     IndexBuilder().build()

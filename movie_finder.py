@@ -11,32 +11,25 @@ import numpy as np
 import pandas as pd
 from sentence_transformers import SentenceTransformer
 
-# Модель уже должна быть закэширована в образе на этапе сборки докера (см. Dockerfile),
-# поэтому в проде она не должна обращаться в интернет
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 
 
 class MovieFinder:
     def __init__(self, model_dir: str = "models"):
         print("🚀 Загрузка модели sentence-transformers...")
-        self.model = SentenceTransformer("intfloat/multilingual-e5-small", local_files_only=True)
+        self.model = SentenceTransformer("intfloat/multilingual-e5-small")
         print("✅ Модель загружена")
 
         print("📂 Загрузка индекса и данных...")
         self.index = faiss.read_index(os.path.join(model_dir, "movie_index.faiss"))
         self.df = pd.read_csv(os.path.join(model_dir, "movies_data.csv"), keep_default_na=False)
 
-        # на случай старых строк без перевода — подстраховка, чтобы не было пустых ответов
         self.df["overview_ru"] = self.df["overview_ru"].replace("", np.nan).fillna(self.df["overview"])
         self.df["genres_ru"] = self.df["genres_ru"].replace("", np.nan).fillna(self.df["genres"])
 
         print(f"✅ Готово: {self.index.ntotal} фильмов в индексе")
 
     def search(self, query: str, top_k: int = 5):
-        """
-        Ищет top_k фильмов, наиболее похожих по смыслу на запрос.
-        Запрос можно писать на русском или английском — модель мультиязычная.
-        """
         query_vec = self.model.encode(["query: " + query], convert_to_numpy=True).astype("float32")
         faiss.normalize_L2(query_vec)
 
