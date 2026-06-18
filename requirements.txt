@@ -1,0 +1,7 @@
+aiogram==3.4.1
+sentence-transformers==2.5.1
+faiss-cpu==1.8.0
+pandas==2.2.1
+numpy==1.26.4
+deep-translator==1.11.4
+python-dotenv-1.2.2
